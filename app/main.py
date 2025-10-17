@@ -1,7 +1,7 @@
 import os
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from supabase import Client, create_client
-from .services.generate_release_form import generate_shipment_pdf
+from .services.generate_release_form import generate_release_form_pdf
 from .helpers.supabase import superset_client
 from ulid import ULID
 app = FastAPI()
@@ -15,9 +15,11 @@ def health():
     return {"pong"}
 
 @app.post("/reports/release-form/{report_id}")
-async def generate_release_form(report_id: str, supabase: Client = Depends(superset_client)):
+async def generate_release_form(report_id: str, request: Request, supabase: Client = Depends(superset_client)):
     background_task = supabase.table('tblbackgroundtasks').insert({ 'id': str(ULID()), 'status': 'generating', 'type': 'release-form', 'type_id': report_id, 'message': None }).execute()
     bg_task_id = background_task.data[0]['id']
+    
+    data = await request.json()
     
     try:
         response = supabase.table("tblreports").select("*").eq("id", report_id).execute()
@@ -25,9 +27,10 @@ async def generate_release_form(report_id: str, supabase: Client = Depends(super
             supabase.table('tblbackgroundtasks').update({ 'status': 'failed', 'message': 'Report not found' }).eq('id', bg_task_id).execute()
             raise HTTPException(status_code=404, detail="Report not found")
 
+        storage_company = data.get("storage_company")
         report_body = response.data[0]["body"]
 
-        pdf_bytes = generate_shipment_pdf(report_body)
+        pdf_bytes = generate_release_form_pdf(report_body, storage_company)
 
         upload_response = supabase.storage.from_("generated-reports").upload(
             path=f"release-forms/{report_id}.pdf",

@@ -7,7 +7,7 @@ from datetime import datetime
 from app.helpers.template import add_header_and_footer
 from io import BytesIO
 
-def generate_shipment_pdf(payload):
+def generate_release_form_pdf(payload, storage_company):
     if isinstance(payload, str):
         payload = json.loads(payload)
         
@@ -18,7 +18,7 @@ def generate_shipment_pdf(payload):
         pagesize=A4,
         leftMargin=40,
         rightMargin=40,
-        topMargin=140,     # Reserve ~80px for logo + padding
+        topMargin=110,   
         bottomMargin=50,
     )
 
@@ -32,14 +32,19 @@ def generate_shipment_pdf(payload):
     awb_style = ParagraphStyle("awb", parent=base, fontName="Helvetica-Bold", fontSize=9, leftIndent=0, textColor=colors.HexColor("#333333"))
     cell_style = ParagraphStyle("cell", parent=base, leftIndent=0, alignment=0)
 
+    story.append(Paragraph(
+        f"Fresco Release Form {storage_company}",
+        ParagraphStyle("header", parent=base, fontName="Helvetica-Bold", fontSize=14, textColor=colors.black, alignment=0)
+    ))
+    
     for batch in payload:
         # Production date header
         prod_date = datetime.fromisoformat(batch["production_date"].replace("Z", "+00:00"))
         heading_style = ParagraphStyle(
             "dispatch_heading_strict",
             parent=styles["Normal"],        # neutral, no auto-indent
-            fontName="Helvetica-Bold",
-            fontSize=11,
+            fontName="Helvetica",
+            fontSize=8,
             textColor=colors.HexColor("#000000"),
             spaceBefore=6,
             spaceAfter=6,
@@ -74,35 +79,34 @@ def generate_shipment_pdf(payload):
 
             for awb_entry in cust["awbs"]:
                 awb = awb_entry["awb"]
-              
 
                 for index, item in enumerate(awb_entry["shipment_items"]):
-                    awb_cell = ""
-                    if index == 0:
-                        awb_cell = table_data.append([Paragraph(awb, awb_style), "", "", "", ""])
+                    # Only include the AWB value in the first row of each group
+                    awb_cell = Paragraph(awb, awb_style) if index == 0 else Paragraph("", cell_style)
+
                     table_data.append([
-                        Paragraph(str(awb_cell), cell_style),  # Empty since AWB already shown
+                        awb_cell,
                         Paragraph(item.get("transport_company", "") or "-", cell_style),
                         Paragraph(item["product"], cell_style),
                         Paragraph(str(item["box_number"]), cell_style),
                         Paragraph(str(item["net_weight"]), cell_style),
                     ])
-                    total_box_number = total_box_number + item['box_number']
-                    total_net_weight = total_net_weight + item['net_weight']
-            
+
+                    total_box_number += item["box_number"]
+                    total_net_weight += item["net_weight"]
             
             table_data.append([
-                Paragraph("Totals:", header_style),  # Empty since AWB already shown
+                Paragraph("Totals:", header_style),
                 Paragraph(""),
                 Paragraph(""),
-                Paragraph(str(total_box_number), header_style),
-                Paragraph(str(total_net_weight), header_style)
+                Paragraph(f"{str(total_box_number)}", header_style),
+                Paragraph(f"{str(total_net_weight)}kg", header_style)
             ])
 
         # Table formatting
         table = Table(table_data, colWidths=[90, 100, 210, 40, 50], repeatRows=1)
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("ALIGN", (0, 0), (-1, 0), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),

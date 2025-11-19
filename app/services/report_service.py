@@ -178,7 +178,7 @@ def generate_release_form(data, title):
                     total_weight += weight
 
                     rows.append([
-                        Paragraph(f"AWB: {awb["awb"]}", table_text),
+                        Paragraph(f"AWB: {awb['awb']}", table_text),
                         Paragraph(item.get("transport_company", "-"), table_text),
                         Paragraph(item["product"], table_text),
                         Paragraph(str(box_no), table_text),
@@ -297,7 +297,7 @@ def generate_collection_form(data, title):
                     total_weight += weight
 
                     rows.append([
-                        Paragraph(f"AWB: {awb["awb"]}", table_text),
+                        Paragraph(f"AWB: {awb['awb']}", table_text),
                         Paragraph(item["storage_company"], table_text),
                         Paragraph(str(box_no), table_text),
                         Paragraph(f"{str(weight)}kg", table_text)

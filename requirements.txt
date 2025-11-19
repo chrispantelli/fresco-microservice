@@ -3,3 +3,5 @@ uvicorn[standard]
 python-ulid
 supabase
 reportlab
+fastapi-restful
+typing_inspect

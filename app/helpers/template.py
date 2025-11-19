@@ -46,3 +46,11 @@ def add_header_and_footer(canvas, doc):
     canvas.drawString(page_width - right_margin - text_width, bottom_margin - 18, address_text)
 
     canvas.restoreState()
+    
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+base = ParagraphStyle("base", fontName="Helvetica", fontSize=9, leading=11, spaceBefore=0, spaceAfter=0)
+header_style = ParagraphStyle("header", parent=base, fontName="Helvetica-Bold", fontSize=9, textColor=colors.black, alignment=0)
+customer_style = ParagraphStyle("customer", parent=base, fontName="Helvetica-Bold", fontSize=10, spaceBefore=4, spaceAfter=2)
+awb_style = ParagraphStyle("awb", parent=base, fontName="Helvetica-Bold", fontSize=9, leftIndent=0, textColor=colors.HexColor("#333333"))
+cell_style = ParagraphStyle("cell", parent=base, leftIndent=0, alignment=0)

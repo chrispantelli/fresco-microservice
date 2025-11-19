@@ -28,6 +28,9 @@ class ReportService:
             elif response.data[0]["type"] == "collection-form":
                 title = body['transport_company']
                 pdf = generate_collection_form(data, title)
+            elif response.data[0]["type"] == "customer-sale-form":
+                title = body['customer_name']
+                pdf = generate_customer_sale_form(data, title)
             else:
                 raise HTTPException(status_code=500, detail="No report type exists.")
                         
@@ -52,6 +55,7 @@ class ReportService:
             
             raise HTTPException(status_code=500, detail=str("Unable to generate PDF."))
         except Exception as e:
+            print(f"Error: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
 def header_with_line(canvas, doc, title):
@@ -174,7 +178,7 @@ def generate_release_form(data, title):
                     total_weight += weight
 
                     rows.append([
-                        Paragraph(awb["awb"], table_text),
+                        Paragraph(f"AWB: {awb["awb"]}", table_text),
                         Paragraph(item.get("transport_company", "-"), table_text),
                         Paragraph(item["product"], table_text),
                         Paragraph(str(box_no), table_text),
@@ -293,7 +297,7 @@ def generate_collection_form(data, title):
                     total_weight += weight
 
                     rows.append([
-                        Paragraph(awb["awb"], table_text),
+                        Paragraph(f"AWB: {awb["awb"]}", table_text),
                         Paragraph(item["storage_company"], table_text),
                         Paragraph(str(box_no), table_text),
                         Paragraph(f"{str(weight)}kg", table_text)
@@ -344,6 +348,174 @@ def generate_collection_form(data, title):
         story, 
         onFirstPage=lambda c, d: (header_with_line(c, d, f"Collection Form Report - {title}"), footer_with_line(c, d)), 
         onLaterPages=lambda c, d: (header_with_line(c, d, f"Collection Form Report - {title}"), footer_with_line(c, d)),
+    )
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generate_customer_sale_form(data, title):
+    if isinstance(data, str):
+        data = json.loads(data)
+
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
+    normal = styles["BodyText"]
+
+    table_text = ParagraphStyle(
+        "table_text",
+        parent=normal,
+        fontSize=9,
+        leading=11
+    )
+
+    doc = SimpleDocTemplate(
+        buffer,
+        topMargin=120,
+        bottomMargin=50,
+        leftMargin=20,
+        rightMargin=20,
+    )
+
+    story = []
+
+    for idx, group in enumerate(data):
+        story.append(Paragraph(
+            f"For products dispatched on {format_date(group['production_date'])}",
+            styles["Heading4"],
+        ))
+        story.append(Spacer(1, 12))
+
+        rows = [
+            [
+                Paragraph("Customer / AWB", table_text),
+                Paragraph("Product", table_text),
+                Paragraph("Box No", table_text),
+                Paragraph("Weight", table_text),
+                Paragraph("Price Per Kg", table_text),
+                Paragraph("Total", table_text),
+            ]
+        ]
+
+        customer_header_row_indices = []
+        awb_header_row_indices = []
+        product_header_row_indices = []
+        totals_row_indices = []
+
+        for customer in group["customers"]:
+            customer_name = customer.get("customer_name") or "Unallocated"
+
+            # ---- CUSTOMER (full-width) ----
+            customer_header_row_indices.append(len(rows))
+            rows.append([
+                Paragraph(customer_name, table_text),
+                "", "", "", "", "",
+            ])
+
+            total_boxes = 0
+            total_weight = 0
+
+            for awb in customer["awbs"]:
+
+                # ---- AWB (full-width, like customer but slightly lighter) ----
+                awb_header_row_indices.append(len(rows))
+                rows.append([
+                    Paragraph(f"AWB: {awb['awb']}", table_text),
+                    "", "", "", "", "",
+                ])
+
+                for product in awb["products"]:
+
+                    product_name = product["product"]
+
+                    # ---- PRODUCT ROW (indent left by leaving col 0 empty) ----
+                    product_header_row_indices.append(len(rows))
+                    rows.append([
+                        "",  # reserved column (same alignment as AWB)
+                        Paragraph(product_name, table_text),
+                        "", "", "", "",
+                    ])
+
+                    # ---- ITEMS ----
+                    for item in product["shipment_items"]:
+                        box_no = item["box_number"]
+                        weight = item["net_weight"]
+
+                        total_boxes += 1
+                        total_weight += weight
+
+                        rows.append([
+                            "",  # no AWB or customer here (header already shown)
+                            "",
+                            Paragraph(str(box_no), table_text),
+                            Paragraph(f"{weight}kg", table_text),
+                            Paragraph(f"£{item['price_per_kg']}", table_text),
+                            Paragraph(f"£{item['total']}", table_text),
+                        ])
+
+            # ---- Totals for customer ----
+            totals_row_indices.append(len(rows))
+            rows.append([
+                Paragraph("Totals", table_text),
+                "",
+                Paragraph(str(total_boxes), table_text),
+                Paragraph(f"{total_weight}kg", table_text),
+                "",
+                "",
+            ])
+
+        # ---- Build table ----
+        table = Table(
+            rows,
+            colWidths=[110, 120, 50, 50, 70, 70],
+            repeatRows=1,
+        )
+
+        style_commands = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]
+
+        # ---- CUSTOMER ROW STYLE ----
+        for r in customer_header_row_indices:
+            style_commands.extend([
+                ("SPAN", (0, r), (-1, r)),
+                ("BACKGROUND", (0, r), (-1, r), colors.whitesmoke),
+                ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"),
+            ])
+
+        # ---- AWB ROW STYLE ----
+        for r in awb_header_row_indices:
+            style_commands.extend([
+                ("SPAN", (0, r), (-1, r)),
+                ("BACKGROUND", (0, r), (-1, r), colors.Color(0.93, 0.93, 0.93)),
+                ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"),
+            ])
+
+        # ---- PRODUCT ROW STYLE ----
+        for r in product_header_row_indices:
+            style_commands.extend([
+                ("SPAN", (1, r), (-1, r)),  # span from col 1 to end
+                ("BACKGROUND", (0, r), (-1, r), colors.Color(0.97, 0.97, 0.97)),
+                ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"),
+            ])
+
+        # ---- TOTALS ROW STYLE ----
+        for r in totals_row_indices:
+            style_commands.extend([
+                ("BACKGROUND", (0, r), (-1, r), colors.HexColor("#f2f2f2")),
+                ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"),
+            ])
+
+        table.setStyle(TableStyle(style_commands))
+
+        story.append(table)
+        story.append(Spacer(1, 16))
+
+    doc.build(
+        story, 
+        onFirstPage=lambda c, d: (header_with_line(c, d, f"Customer Sales Order - {title}"), footer_with_line(c, d)), 
+        onLaterPages=lambda c, d: (header_with_line(c, d, f"Customer Sales Order - {title}"), footer_with_line(c, d)),
     )
     buffer.seek(0)
     return buffer.getvalue()

@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import Depends, HTTPException
 from supabase import Client
 
-from app.helpers.supabase import superset_client
+from app.helpers.supabase import supabase_user_client, supabase_admin_client
 from app.constants.reports import REPORT_TYPES
 from app.utils import current_date_epoch, format_date
 
@@ -14,8 +14,13 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 class ReportService:
-    def __init__(self, supabase: Client = Depends(superset_client)):
-        self.supabase = supabase
+    def __init__(
+        self,
+        supabase_user: Client = Depends(supabase_user_client),
+        supabase_admin: Client = Depends(supabase_admin_client),
+    ):
+        self.supabase_user = supabase_user
+        self.supabase_admin = supabase_admin
     
     async def generate(self, report_id: str, body: dict[str, Any]):
         try:
@@ -34,7 +39,7 @@ class ReportService:
             else:
                 raise HTTPException(status_code=500, detail="No report type exists.")
                         
-            upload_file = self.supabase.storage.from_("generated-reports").upload(
+            upload_file = self.supabase_admin.storage.from_("generated-reports").upload(
                 path=f"{report_id}-{current_date_epoch()}.pdf",
                 file=pdf,
                 file_options={"content-type": "application/pdf", "upsert": "true"}
@@ -48,7 +53,7 @@ class ReportService:
                 f"{upload_file.full_path}"
             )
             
-            updated_generated_pdf = self.supabase.table("tblreports").update({ "generated_pdf": public_url }).eq("id", report_id).execute()
+            updated_generated_pdf = self.supabase_user.table("tblreports").update({ "generated_pdf": public_url }).eq("id", report_id).execute()
 
             if updated_generated_pdf:
                 return public_url

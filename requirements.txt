@@ -5,3 +5,4 @@ supabase
 reportlab
 fastapi-restful
 typing_inspect
+camelot-py[base]

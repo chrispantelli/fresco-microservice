@@ -28,8 +28,9 @@ class ShipmentService:
 
             for i in body:
                 customer_id = i["customer_id"]
+                customer_name = i["customer_name"]
 
-                pdf_bytes = generate_allocation_sheet(i, f"Customer Sales Order - {customer_id}")
+                pdf_bytes = generate_allocation_sheet(i, f"Customer Sales Order - {customer_name}")
 
                 path = f"shipments/{shipment_id}/{customer_id}/{current_date_epoch()}.pdf"
 
@@ -86,7 +87,7 @@ def header_with_line(canvas, doc, title):
 
     today = datetime.now().strftime("%d %B %Y")
 
-    center_text = title
+    center_text = ""
     canvas.drawCentredString(page_width / 2, header_y, center_text)
 
     canvas.drawRightString(page_width - 20, header_y, today)
@@ -179,6 +180,7 @@ def generate_allocation_sheet(data, title):
         total_value = 0.0
 
         for item in customer.get("items", []):
+            print(item)
             box_no = item.get("box_number", 0) or 0
             weight = float(item.get("net_weight", 0) or 0)
             ppk = item.get("price_per_kg")

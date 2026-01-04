@@ -26,7 +26,7 @@ class MainController:
             tables = await run_in_threadpool(
                 camelot.read_pdf,
                 shipment_url,
-                pages="all"    
+                pages="all"
             )
             
             df = pd.concat([t.df for t in tables], ignore_index=True)
@@ -54,14 +54,22 @@ class MainController:
                 + " "
                 + df["grade"].astype(str)
             )
+        
+            df["net_weight"] = (
+                df["quantity"]
+                    .astype(str)
+                    .str.replace(r"\s+", ".", regex=True)
+            )
+            
+            df["pieces_per_box"] = 0
             
             df["product"] = df["product"].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
             df = df[df["product"].ne("")]
             
-            df = df.drop(columns=["fish_name", "process_type", "sub_process_type", "grade"])
+            df = df.drop(columns=["fish_name", "process_type", "sub_process_type", "grade", "quantity", "fillet_quantity"])
         
             df = df.reset_index(drop=True)
-
+            
             return {"data": df.to_dict(orient="records")}
         except Exception as e:
             raise HTTPException(

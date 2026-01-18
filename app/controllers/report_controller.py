@@ -10,8 +10,12 @@ report_router = APIRouter()
 class ReportController:
     report_service: ReportService = Depends(ReportService)
         
-    @report_router.post('/reports/{report_id}', operation_id="create_release_form")
-    async def create_release_form(self, report_id: str, body: Dict[str, Any] = Body(...)):
-        return await self.report_service.generate(report_id, body)
+    @report_router.post('/reports/release-forms', operation_id="create_release_form")
+    async def create_release_form(self, body: Any = Body(...)):
+        return await self.report_service.create_release_form(body)
+    
+    @report_router.post('/reports/collection-forms', operation_id="create_collection_form")
+    async def create_collection_form(self, body: Any = Body(...)):
+        return await self.report_service.create_collection_form(body)
         
         

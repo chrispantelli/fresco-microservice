@@ -1,5 +1,7 @@
 import asyncio
+from collections import defaultdict
 import os
+import datetime
 
 from io import BytesIO
 
@@ -8,14 +10,13 @@ from fastapi import Depends, HTTPException
 from supabase import Client
 from uuid import uuid4
 
-from reportlab.platypus import Paragraph, Spacer
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from app.classes.report import ReportTemplate
 from app.functions.table import build_collection_table, build_release_table
 from app.helpers.db import get_db_connection
 from app.helpers.supabase import supabase_user_client, supabase_admin_client
 from app.queries.reports import insert_generated_report
-from app.utils import current_date_epoch
 
 class ReportService:
     def __init__(
@@ -30,84 +31,101 @@ class ReportService:
     
     async def create_release_form(self, body: List[Dict[str, Any]]):
         try:
-            conn = get_db_connection()
+            response = []
 
-            try:
-                for company in body:
-                    storage_company = company.get("storage_company")
-                    storage_company_id = storage_company.get('id');       
-                    storage_company_name = storage_company.get('name');      
-                    file_name = f"{storage_company_name}-{uuid4().hex}-report.pdf"
+            for company in body:
+                storage_company_id = company.get("id")
+                storage_company_name = company.get("name")
 
-                    buf = BytesIO()
-                    pdf_doc = ReportTemplate(
-                        buf,
-                        header_text=f"{storage_company_name} - Release Form",
+                buf = BytesIO()
+                pdf = ReportTemplate(
+                    buf,
+                    header_text=f"{storage_company_name} - Release Form",
+                )
+
+                elements: List[Any] = []
+
+                groups = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+
+                for shipment in company["shipments"]:
+                    awb = shipment.get("awb")
+                    production_date = shipment.get("production_date")
+
+                    for item in shipment["shipment_items"]:
+                        customer = item.get("customer")
+
+                        if customer:
+                            customer_name = customer.get("name")
+                            groups[production_date][customer_name][awb].append(item)
+
+                production_style = pdf.styles["Normal"].clone("production_style")
+                production_style.fontName = "Helvetica-Bold"
+                production_style.fontSize = 11
+                production_style.leading = 13
+                production_style.leftIndent = 0
+                production_style.firstLineIndent = 0
+                production_style.spaceBefore = 0
+                production_style.spaceAfter = 6
+                
+                dispatch_style = pdf.styles["Normal"].clone("dispatch_style")
+                dispatch_style.fontName = "Helvetica-Bold"
+                dispatch_style.fontSize = 11
+                dispatch_style.leftIndent = 0
+                dispatch_style.firstLineIndent = 0
+                dispatch_style.spaceBefore = 0
+                dispatch_style.spaceAfter = 8
+
+                customer_style = pdf.styles["Normal"].clone("customer_style")
+                customer_style.fontName = "Helvetica-Bold"
+                customer_style.fontSize = 10
+                customer_style.leftIndent = 0
+                customer_style.firstLineIndent = 0
+                customer_style.spaceBefore = 0
+                customer_style.spaceAfter = 6
+
+                for production_date, customers in groups.items():
+                    formated_date = datetime.datetime.fromisoformat(
+                                        production_date.replace("Z", "+00:00")
+                                    ).strftime("%d %b %Y")
+                    
+                    elements.append(
+                        Paragraph(f"For products dispatched on: {formated_date}", dispatch_style)
                     )
+                    elements.append(Spacer(1, 8))
 
-                    elements: List[Any] = []
-
-                    for customer_items in company.get("customer_items", []):
-                        customer_name = customer_items.get("customer_name") or "Unassigned"
-                        elements.append(Paragraph(f"Customer: {customer_name}", pdf_doc.styles["Normal"]))
+                    for customer_name, awb_groups in customers.items():
+                        elements.append(Paragraph(customer_name, customer_style))
                         elements.append(Spacer(1, 6))
 
-                        customer_total_rows = 0
-                        customer_total_weight = 0.0
+                        table = build_release_table(pdf, awb_groups)
+                        elements.append(table)
+                        elements.append(Spacer(1, 18))
 
-                        for awb in customer_items.get("awbs", []):
-                            awb_id = awb.get("awb") or ""
-                            awb_rows = awb.get("items", [])
+                    elements.append(Spacer(1, 8))
 
-                            elements.append(Spacer(1, 8))
+                pdf.build(elements)
+                pdf_bytes = buf.getvalue()
+                buf.close()
 
-                            table, awb_total_rows, awb_total_weight = build_release_table(pdf_doc, awb_id, awb_rows)
-                            elements.append(table)
+                file_path = f"collection-forms/{uuid4().hex}.pdf"
 
-                            customer_total_rows += awb_total_rows
-                            customer_total_weight += awb_total_weight
+                res = self.supabase_admin.storage.from_("generated-reports").upload(
+                    file_path,
+                    pdf_bytes,
+                    {"content-type": "application/pdf"},
+                )
 
-                        elements.append(Spacer(1, 8))
-                        elements.append(
-                            Paragraph(
-                                f"<b>Customer Totals:</b> &nbsp;&nbsp; "
-                                f"Boxes: {customer_total_rows} &nbsp;&nbsp; "
-                                f"Weight: {customer_total_weight:.2f}kg",
-                                pdf_doc.styles["Normal"],
-                            )
-                        )
-                        elements.append(Spacer(1, 14))
+                url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{res.full_path}"
 
-                    pdf_doc.build(elements)
-                    pdf_bytes = buf.getvalue()
-                    buf.close()
+                response.append({
+                    "type": "release_form",
+                    "storage_company_id": storage_company_id,
+                    "url": url,
+                    "body": body,
+                    "date_generated": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
 
-                    file_path = f"release-forms/{file_name}"
-
-                    res = self.supabase_admin.storage.from_("generated-reports").upload(
-                        file_path,
-                        pdf_bytes,
-                        {"content-type": "application/pdf"},
-                    )
-                    
-                    
-                    pdf_url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{res.full_path}"
-                                        
-                    await asyncio.to_thread(
-                        insert_generated_report,
-                        conn,
-                        type="release-form",
-                        related_to=storage_company_id,
-                        pdf_url=pdf_url,
-                        date_from=body[0]['dateRange']['dateFrom'],
-                        date_to=body[0]["dateRange"]['dateTo']
-                    )
-
-                    conn.commit()
-
-                return True
-            finally:
-                conn.close()
+            return response
 
         except Exception as e:
             print(f"Error: {str(e)}")
@@ -116,14 +134,14 @@ class ReportService:
     async def create_collection_form(self, body: List[Dict[str, Any]]):
         try:
             conn = get_db_connection()
-    
+
             try:
                 for company in body:
                     transport_company = company.get("transport_company")
                     transport_company_id = transport_company.get('id');       
                     transport_company_name = transport_company.get('name');                
                     file_name = f"{transport_company_name}-{uuid4().hex}-report.pdf"
-
+  
                     buf = BytesIO()
                     pdf_doc = ReportTemplate(
                         buf,
@@ -131,6 +149,12 @@ class ReportService:
                     )
 
                     elements: List[Any] = []
+                    
+                    elements.append(Paragraph(f"Customer"))
+                    
+                    pdf_doc.build(elements)
+                    pdf_bytes = buf.getvalue()
+                    buf.close()
 
                     for customer_items in company.get("customer_items", []):
                         customer_name = customer_items.get("customer_id") or "Unassigned"

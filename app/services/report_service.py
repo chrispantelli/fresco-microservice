@@ -107,7 +107,7 @@ class ReportService:
                 pdf_bytes = buf.getvalue()
                 buf.close()
 
-                file_path = f"collection-forms/{uuid4().hex}.pdf"
+                file_path = f"release-forms/{uuid4().hex}.pdf"
 
                 res = self.supabase_admin.storage.from_("generated-reports").upload(
                     file_path,

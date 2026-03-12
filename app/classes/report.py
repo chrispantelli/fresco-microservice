@@ -9,7 +9,7 @@ class ReportTemplate(BaseDocTemplate):
         super().__init__(filename, **kwargs)
         self.styles = getSampleStyleSheet()
 
-        margin = inch
+        margin = 0.5 * inch
         header_h = 0.25 * inch
         footer_h = 0.25 * inch
         gap = 0.10 * inch

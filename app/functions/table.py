@@ -29,8 +29,8 @@ def build_release_table(
 
     data: List[List[Any]] = [[
         Paragraph("AWB", header),
-        Paragraph("Barcode", header),
-        Paragraph("Description", header),
+        Paragraph("Transport Company", header),
+        Paragraph("Product", header),
         Paragraph("Box", header),
         Paragraph("Weight", header),
     ]]
@@ -45,8 +45,8 @@ def build_release_table(
 
             data.append([
                 Paragraph(str(awb_header or ""), normal),
-                Paragraph(str(item.get("barcode_number", "") or ""), normal),
-                Paragraph(str(item.get("product", {}).get("name", "") or ""), normal),
+                Paragraph(str(item.get("transportCompany", {}).get("name", "") or ""), normal),
+                Paragraph(str(item.get("product", {}).get("description", "") or ""), normal),
                 Paragraph(str(item.get("box_number", "") or ""), normal),
                 Paragraph(f"{weight:.2f}", normal),
             ])

@@ -69,7 +69,7 @@ class ReportService:
                 
                 dispatch_style = pdf.styles["Normal"].clone("dispatch_style")
                 dispatch_style.fontName = "Helvetica-Bold"
-                dispatch_style.fontSize = 11
+                dispatch_style.fontSize = 8
                 dispatch_style.leftIndent = 0
                 dispatch_style.firstLineIndent = 0
                 dispatch_style.spaceBefore = 0

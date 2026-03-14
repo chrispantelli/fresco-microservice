@@ -316,10 +316,9 @@ def build_release_table_legacy(
 
 def build_collection_table(
     pdf_doc: ReportTemplate,
-    transport_company: str,
-    awb: str,
-    rows: List[Dict[str, Any]]
-) -> Tuple[Table, int, float]:
+    storage_company_name: str,
+    awb_groups: Dict[str, List[Dict[str, Any]]]
+):
     frame_w = pdf_doc.frame.width
 
     normal = pdf_doc.styles["Normal"].clone("tbl_normal")
@@ -336,42 +335,42 @@ def build_collection_table(
     footer.fontSize = 9
     footer.leading = 11
 
+    col_fracs = [0.25, 0.25, 0.25, 0.25]
+    col_widths = [frame_w * f for f in col_fracs]
+
     data: List[List[Any]] = [[
         Paragraph("AWB", header),
         Paragraph("Collection Point", header),
-        Paragraph("Box No")
+        Paragraph("Box", header),
+        Paragraph("Weight", header)
     ]]
 
-    total_weight = 0.0
-    
-    for r in rows or []:
-        box_number = r.get("box_number") or ""
-        net_weight = r.get("net_weight") or 0
-        
-        try:
-            total_weight += float(net_weight)
-        except (TypeError, ValueError):
-            pass
+    total_box_number = 0
+    total_customer_weight = 0.0
 
-        data.append([
-            Paragraph(str(awb), normal),
-            Paragraph(str(transport_company), normal),
-            Paragraph(str(box_number), normal),
-        ])
+    for awb, items in awb_groups.items():
+        for index, item in enumerate(items):
+            awb_header = awb if index == 0 else ""
+            weight = float(item.get("net_weight") or 0)
 
-        
+            data.append([
+                Paragraph(str(awb_header or ""), normal),
+                Paragraph(storage_company_name, normal),
+                Paragraph(str(item.get("box_number", "") or ""), normal),
+                Paragraph(f"{weight:.2f}", normal),
+            ])
 
-    total_rows = len(rows or [])
+            total_box_number += 1
+            total_customer_weight += weight
 
-    # AWB footer row
     data.append([
-        Paragraph("Total", footer),
+        Paragraph("Totals", footer),
         Paragraph("", footer),
-        Paragraph(f"{total_rows}", footer),
+        Paragraph(str(total_box_number), footer),
+        Paragraph(f"{total_customer_weight:.2f}kg", footer),
     ])
 
-    col_fracs = [0.50, 0.40, 0.10]
-    col_widths = [frame_w * f for f in col_fracs]
+    last_row = len(data) - 1
 
     table = Table(
         data,
@@ -380,22 +379,17 @@ def build_collection_table(
         repeatRows=1,
     )
 
-    last_row = len(data) - 1
-
     table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 1, colors.transparent),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.transparent),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-
-        # Style AWB totals row
         ("BACKGROUND", (0, last_row), (-1, last_row), colors.whitesmoke),
         ("LINEABOVE", (0, last_row), (-1, last_row), 1.0, colors.grey),
         ("ALIGN", (3, 1), (4, -1), "RIGHT"),
     ]))
 
-    return table, total_rows, total_weight
+    return table

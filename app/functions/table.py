@@ -176,7 +176,7 @@ def build_shipment_allocation_table(
             ],
             Paragraph(str(item.get("currency") or ""), normal),
             Paragraph(str(item.get("rate") or ""), normal),
-            Paragraph(f"{str(item.get("net_weight") or "")}kg", normal),
+            Paragraph(f"{str(item.get('net_weight') or '')}kg", normal),
             Paragraph(str(item.get("pieces_per_box") or ""), normal),
             Paragraph(str(item.get("todays_price_per_kilo") or ""), normal),
             Paragraph((item.get("transport_companies") or {}).get("name") or "-", normal),

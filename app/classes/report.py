@@ -1,11 +1,25 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import BaseDocTemplate, PageTemplate, Frame, Paragraph
+from reportlab.platypus import BaseDocTemplate, PageTemplate, Frame
 from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape, portrait
+
 
 class ReportTemplate(BaseDocTemplate):
-    def __init__(self, filename: str, header_text: str = "Report", **kwargs):
+    def __init__(
+        self,
+        filename: str,
+        header_text: str = "Report",
+        orientation: str = "portrait",
+        base_pagesize=A4,
+        **kwargs
+    ):
+        if orientation.lower() == "landscape":
+            kwargs["pagesize"] = landscape(base_pagesize)
+        else:
+            kwargs["pagesize"] = portrait(base_pagesize)
+
         super().__init__(filename, **kwargs)
         self.styles = getSampleStyleSheet()
 
@@ -50,44 +64,25 @@ class ReportTemplate(BaseDocTemplate):
 
         left_x = self.header_frame.x1
         right_x = self.header_frame.x1 + self.header_frame.width
-        
+
         header_top_y = self.header_frame.y1 + self.header_frame.height
         header_text_y = self.header_frame.y1 + 8
         footer_y = self.footer_frame.y1 + 4
 
         canvas.setStrokeColor(line_color)
         canvas.setLineWidth(0.5)
-        canvas.line(
-            left_x,
-            header_top_y + 6,
-            right_x,
-            header_top_y + 6,
-        )
+        canvas.line(left_x, header_top_y + 6, right_x, header_top_y + 6)
 
         canvas.setFillColor(text_color)
         canvas.setFont("Helvetica-Bold", 11)
-
-        canvas.drawString(
-            left_x,
-            header_text_y,
-            "Fresco Fisheries (UK) Limited",
-        )
+        canvas.drawString(left_x, header_text_y, "Fresco Fisheries (UK) Limited")
 
         canvas.setFont("Helvetica", 9)
-        canvas.drawRightString(
-            right_x,
-            header_text_y,
-            self.header_text,
-        )
+        canvas.drawRightString(right_x, header_text_y, self.header_text)
 
         canvas.setStrokeColor(line_color)
         canvas.setLineWidth(line_width)
-        canvas.line(
-            left_x,
-            self.header_frame.y1 - 4,
-            right_x,
-            self.header_frame.y1 - 4,
-        )
+        canvas.line(left_x, self.header_frame.y1 - 4, right_x, self.header_frame.y1 - 4)
 
         canvas.drawString(
             left_x,

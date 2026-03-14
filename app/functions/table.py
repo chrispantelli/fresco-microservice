@@ -3,6 +3,7 @@ from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.lib import colors
 
 from app.classes.report import ReportTemplate
+from app.utils import format_date
 
 def build_release_table(
     pdf_doc: ReportTemplate,
@@ -86,99 +87,141 @@ def build_release_table(
 
     return table
 
-# def build_release_table(
-#     pdf_doc: ReportTemplate,
-#     customer: List[Dict[str, Any]]
-# ):
-#     frame_w = pdf_doc.frame.width
-#     normal = pdf_doc.styles["Normal"].clone("tbl_normal")
-#     normal.fontSize = 9
-#     normal.leading = 11
+def build_shipment_allocation_summary_grid(pdf_doc, shipment_id, supplier_name, arrival_date, awb, country, production_date, storage_location, expiry_date):
+    width = pdf_doc.frame.width
+    styles = pdf_doc.styles
+    normal = styles["Normal"].clone("grid_normal")
+    normal.fontSize = 9
+    normal.leading = 11
 
-#     header = pdf_doc.styles["Normal"].clone("tbl_header")
-#     header.fontName = "Helvetica-Bold"
-#     header.fontSize = 9
-#     header.leading = 11
+    data = [
+        [
+            Paragraph(f"<b>Shipment ID:</b> {shipment_id}", normal),
+            Paragraph(f"<b>Supplier:</b> {supplier_name}", normal),
+            Paragraph(f"<b>Arrival Date:</b> {format_date(arrival_date)}", normal),
+        ],
+        [
+            Paragraph(f"<b>AWB:</b> {awb}", normal),
+            Paragraph(f"<b>Country:</b> {country}", normal),
+            Paragraph(f"<b>Production Date:</b> {format_date(production_date)}", normal),
+        ],
+        [
+            Paragraph("", normal),
+            Paragraph(f"<b>Storage Location:</b> {storage_location}", normal),
+            Paragraph(f"<b>Expiry Date:</b> {format_date(expiry_date)}", normal),
+        ],
+    ]
 
-#     footer = pdf_doc.styles["Normal"].clone("tbl_footer")
-#     footer.fontName = "Helvetica-Bold"
-#     footer.fontSize = 9
-#     footer.leading = 11
-    
-#     col_fracs = [0.20, 0.20, 0.40, 0.10, 0.10]
-#     col_widths = [frame_w * f for f in col_fracs]
-    
-#     print(customer)
-    
-    # data: List[List[Any]] = [[
-    #     Paragraph("AWB", header),
-    #     Paragraph("Transport Company", header),
-    #     Paragraph("Product", header),
-    #     Paragraph("Box No", header),
-    #     Paragraph("Weight", header),
-    # ]]
-    
-    # total_weight = 0.0
-    
-    # for index, r in enumerate(rows) or []:
-    #     transport_name = (r.get("transportCompany") or {}).get("name") or ""
-    #     product_name = (r.get("product") or {}).get("name") or ""
-    #     box_number = r.get("box_number") or ""
-    #     net_weight = r.get("net_weight") or 0
-    #     awb_header = awb
-    
-    #     try:
-    #         total_weight += float(net_weight)
-    #     except (TypeError, ValueError):
-    #         pass
-        
-    #     if index >= 1:
-    #         awb_header = ""
-        
-    #     data.append([
-    #         Paragraph(str(awb_header), normal),
-    #         Paragraph(str(transport_name), normal),
-    #         Paragraph(str(product_name), normal),
-    #         Paragraph(str(box_number), normal),
-    #         Paragraph(str(net_weight), normal),
-    #     ])
+    table = Table(
+        data,
+        colWidths=[width / 3] * 3,
+    )
 
-    # total_rows = len(rows or [])
+    table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.transparent),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 1),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 1),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    return table
+
+def build_shipment_allocation_table(
+    pdf_doc: ReportTemplate,
+    shipment_items: Dict[str, List[Dict[str, Any]]]
+):
+    frame_w = pdf_doc.frame.width
+
+    normal = pdf_doc.styles["Normal"].clone("tbl_normal")
+    normal.fontSize = 9
+    normal.leading = 11
+
+    header = pdf_doc.styles["Normal"].clone("tbl_header")
+    header.fontName = "Helvetica-Bold"
+    header.fontSize = 9
+    header.leading = 11
     
-    # # data.append([
-    # #     Paragraph(f" ", footer),
-    # #     Paragraph("", footer),
-    # #     Paragraph("", footer),
-    # #     Paragraph(f"{total_rows}", footer),
-    # #     Paragraph(f"{total_weight:.2f}kg", footer),
-    # # ])
+    small_style = normal.clone("small_style")
+    small_style.fontSize = 8
+    small_style.textColor = colors.grey
+
+    footer = pdf_doc.styles["Normal"].clone("tbl_footer")
+    footer.fontName = "Helvetica-Bold"
+    footer.fontSize = 9
+    footer.leading = 11
+
+    col_fracs = [0.05, 0.40, 0.10, 0.05, 0.05, 0.10, 0.10, 0.10, 0.05]
+    col_widths = [frame_w * f for f in col_fracs]
+
+    data: List[List[Any]] = [[
+        Paragraph("Box No", header),
+        Paragraph("Product/Customer", header),
+        Paragraph("Currency", header),
+        Paragraph("Rate", header),
+        Paragraph("Net Weight", header),
+        Paragraph("Pieces Per Box", header),
+        Paragraph("Price Per Kilo", header),
+        Paragraph("Transport Company", header),
+        Paragraph("Price", header)
+    ]]
+
+    for index, item in enumerate(shipment_items):
+        data.append([
+            Paragraph(str(item.get("box_number") or ""), normal),
+            [
+                Paragraph((item.get("product") or {}).get("description", ""), normal),
+                Paragraph((item.get("customer") or {}).get("name") or "Unallocated", small_style)
+            ],
+            Paragraph(str(item.get("currency") or ""), normal),
+            Paragraph(str(item.get("rate") or ""), normal),
+            Paragraph(f"{str(item.get("net_weight") or "")}kg", normal),
+            Paragraph(str(item.get("pieces_per_box") or ""), normal),
+            Paragraph(str(item.get("todays_price_per_kilo") or ""), normal),
+            Paragraph((item.get("transport_companies") or {}).get("name") or "-", normal),
+            Paragraph(f"£{item.get('price'):.2f}", normal),
+        ])
     
-    # table = Table(
-    #     data,
-    #     colWidths=col_widths,
-    #     hAlign="CENTER",
-    #     repeatRows=1,
-    # )
-
-    # last_row = len(data) - 1
-
-    # table.setStyle(TableStyle([
-    #     ("GRID", (0, 0), (-1, -1), 0.5, colors.transparent),
-    #     ("BACKGROUND", (0, 0), (-1, 0), colors.transparent),
-    #     ("VALIGN", (0, 0), (-1, -1), "TOP"),
-
-    #     ("LEFTPADDING", (0, 0), (-1, -1), 3),
-    #     ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-    #     ("TOPPADDING", (0, 0), (-1, -1), 2),
-    #     ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-
-    #     # # Style AWB totals row
-    #     # ("BACKGROUND", (0,last_row ), (-1, last_row), colors.whitesmoke),
-    #     # ("LINEABOVE", (0, last_row), (-1, last_row), 1.0, colors.grey),
-    #     # ("ALIGN", (3, 1), (4, -1), "RIGHT"),
-    # ]))
+    total_weight = sum(item.get("net_weight", 0) for item in shipment_items)
+    total_pieces_per_box = sum(item.get("pieces_per_box", 0) for item in shipment_items)
+    total_price = sum(item.get("price", 0) for item in shipment_items)
     
-    # return table, total_weight
+    data.append([
+        Paragraph(f"{len(shipment_items)}", footer),
+        Paragraph("", footer),
+        Paragraph("", footer),
+        Paragraph("", footer),
+        Paragraph(f"{total_weight:.2f}kg", footer),
+        Paragraph(f"{total_pieces_per_box}", footer),
+        Paragraph("", footer),
+        Paragraph("", footer),
+        Paragraph(f"£{total_price:.2f}", footer)
+    ])
+
+    last_row = len(data) - 1
+
+    table = Table(
+        data,
+        colWidths=col_widths,
+        hAlign="CENTER",
+        repeatRows=1,
+    )
+    
+    table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 1, colors.transparent),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.transparent),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("BACKGROUND", (0, last_row), (-1, last_row), colors.whitesmoke),
+        ("LINEABOVE", (0, last_row), (-1, last_row), 1.0, colors.grey),
+        ("ALIGN", (3, 1), (4, -1), "RIGHT"),
+    ]))
+
+    return table
 
 def build_release_table_legacy(
     pdf_doc: ReportTemplate,

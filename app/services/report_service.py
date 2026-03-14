@@ -13,7 +13,7 @@ from uuid import uuid4
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from app.classes.report import ReportTemplate
-from app.functions.table import build_collection_table, build_release_table
+from app.functions.table import build_collection_table, build_release_table, build_shipment_allocation_summary_grid, build_shipment_allocation_table
 from app.helpers.db import get_db_connection
 from app.helpers.supabase import supabase_user_client, supabase_admin_client
 from app.queries.reports import insert_generated_report
@@ -41,6 +41,7 @@ class ReportService:
                 pdf = ReportTemplate(
                     buf,
                     header_text=f"{storage_company_name} - Release Form",
+                    orientation="portrait"
                 )
 
                 elements: List[Any] = []
@@ -127,6 +128,61 @@ class ReportService:
 
             return response
 
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+        
+    async def create_shipment_allocation(self, body: List[Dict[str, Any]]):
+        try:
+            awb = body.get("awb")
+            shipment_id = body.get("id")
+            shipment_items = body.get("shipment_items")
+            supplier = body.get('supplier')
+            arrival_date = body.get('arrival_date')
+            country = body.get('country')
+            production_date = body.get('production_date')
+            storage_name = (body.get("storage_companies") or {}).get("name", "")
+            expiry_date = body.get('expiry_date')
+
+            buf = BytesIO()
+            pdf = ReportTemplate(
+                buf,
+                header_text=f"Fresco Shipment - {awb}",
+                orientation="landscape"
+            )
+            
+            elements: List[Any] = []
+            
+            summary_table = build_shipment_allocation_summary_grid(pdf, shipment_id, supplier, arrival_date, awb, country, production_date, storage_name, expiry_date)
+            elements.append(summary_table)
+            
+            elements.append(Spacer(1, 16))
+            
+            table = build_shipment_allocation_table(pdf, shipment_items)
+            elements.append(table)
+            
+            pdf.build(elements)
+            pdf_bytes = buf.getvalue()
+            buf.close()
+
+            file_path = f"shipment-allocations/{uuid4().hex}.pdf"
+
+            res = self.supabase_admin.storage.from_("generated-reports").upload(
+                file_path,
+                pdf_bytes,
+                {"content-type": "application/pdf"},
+            )
+
+            url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{res.full_path}"
+
+            return {
+                "type": "shipment_allocation",
+                "shipment_id": shipment_id,
+                "url": url,
+                "body": body,
+                "date_generated": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            }
+                                        
         except Exception as e:
             print(f"Error: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))

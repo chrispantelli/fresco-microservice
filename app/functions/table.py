@@ -443,7 +443,7 @@ def build_customer_allocation_table(
             Paragraph(str(item.get('pieces_per_box') or ""), normal),
             Paragraph(str(item.get('net_weight') or ""), normal),
             Paragraph("£" + str(item.get('todays_price_per_kilo') or "0.00"), normal),
-            Paragraph(str(item.get('price') or ""), normal),
+            Paragraph("£" + str(item.get('price') or "0.00"), normal),
         ])
         
         total_box_number += 1

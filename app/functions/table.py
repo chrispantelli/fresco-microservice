@@ -393,3 +393,94 @@ def build_collection_table(
     ]))
 
     return table
+
+def build_customer_allocation_table(
+    pdf_doc: ReportTemplate,
+    product_groups: Dict[str, List[Dict[str, Any]]],
+):
+    frame_w = pdf_doc.frame.width
+
+    normal = pdf_doc.styles["Normal"].clone("tbl_normal")
+    normal.fontSize = 9
+    normal.leading = 11
+
+    header = pdf_doc.styles["Normal"].clone("tbl_header")
+    header.fontName = "Helvetica-Bold"
+    header.fontSize = 9
+    header.leading = 11
+
+    footer = pdf_doc.styles["Normal"].clone("tbl_footer")
+    footer.fontName = "Helvetica-Bold"
+    footer.fontSize = 9
+    footer.leading = 11
+
+    col_fracs = [0.30, 0.20, 0.05, 0.10, 0.1, 0.15, 0.1]
+    col_widths = [frame_w * f for f in col_fracs]
+
+    data: List[List[Any]] = [[
+        Paragraph("Product", header),
+        Paragraph("AWB", header),
+        Paragraph("Box No", header),
+        Paragraph("Number of Pieces", header),
+        Paragraph("Net Weight", header),
+        Paragraph("Price Per Kg", header),
+        Paragraph("Price", header)
+    ]]
+
+    total_box_number = 0
+    total_price_per_kilo = 0.0
+    total_customer_weight = 0.0
+    total_price = 0.0
+         
+    product, items = product_groups
+    
+    for index, item in enumerate(items):
+        product_header = product if index == 0 else ""
+        data.append([
+            Paragraph(str(product_header or ""), normal),
+            Paragraph(str(item.get('awb') or ""), normal),
+            Paragraph(str(item.get('box_number') or ""), normal),
+            Paragraph(str(item.get('pieces_per_box') or ""), normal),
+            Paragraph(str(item.get('net_weight') or ""), normal),
+            Paragraph("£" + str(item.get('todays_price_per_kilo') or "0.00"), normal),
+            Paragraph(str(item.get('price') or ""), normal),
+        ])
+        
+        total_box_number += 1
+        total_customer_weight += item.get('net_weight')
+        total_price_per_kilo += item.get('todays_price_per_kilo')
+        total_price += item.get('price')
+        
+    data.append([
+        Paragraph("Totals", footer),
+        Paragraph("", footer),
+        Paragraph(str(total_box_number), footer),
+        Paragraph("", footer),
+        Paragraph(f"{total_customer_weight:.2f}kg", footer),
+        Paragraph(f"£{total_price_per_kilo:.2f}", footer),
+        Paragraph(f"£{total_price:.2f}", footer)
+    ])
+
+    last_row = len(data) - 1
+
+    table = Table(
+        data,
+        colWidths=col_widths,
+        hAlign="CENTER",
+        repeatRows=1,
+    )
+
+    table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 1, colors.transparent),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.transparent),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("BACKGROUND", (0, last_row), (-1, last_row), colors.whitesmoke),
+        ("LINEABOVE", (0, last_row), (-1, last_row), 1.0, colors.grey),
+        ("ALIGN", (3, 1), (4, -1), "RIGHT"),
+    ]))
+
+    return table

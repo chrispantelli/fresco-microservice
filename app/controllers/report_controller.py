@@ -21,5 +21,9 @@ class ReportController:
     @report_router.post('/reports/collection-forms', operation_id="create_collection_form")
     async def create_collection_form(self, body: Any = Body(...)):
         return await self.report_service.create_collection_form(body)
+    
+    @report_router.post('/reports/customer-allocation-forms', operation_id="create_customer_allocation_form")
+    async def create_customer_allocation_form(self, body: Any = Body(...)):
+        return await self.report_service.create_customer_allocation_form(body)
         
         

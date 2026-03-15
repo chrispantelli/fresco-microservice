@@ -10,10 +10,10 @@ from fastapi import Depends, HTTPException
 from supabase import Client
 from uuid import uuid4
 
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, Spacer
 
 from app.classes.report import ReportTemplate
-from app.functions.table import build_collection_table, build_release_table, build_shipment_allocation_summary_grid, build_shipment_allocation_table
+from app.functions.table import build_collection_table, build_customer_allocation_table, build_release_table, build_shipment_allocation_summary_grid, build_shipment_allocation_table
 from app.helpers.db import get_db_connection
 from app.helpers.supabase import supabase_user_client, supabase_admin_client
 
@@ -284,6 +284,109 @@ class ReportService:
                     "date_generated": datetime.datetime.now(datetime.timezone.utc).isoformat()
                 })
                 
+            return response
+
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+        
+    async def create_customer_allocation_form(self, body: List[Dict[str, Any]]):
+        try:
+            response = []
+
+            for customer in body:
+                customer_id = customer.get("id")
+                customer_name = customer.get("name")
+
+                buf = BytesIO()
+                pdf = ReportTemplate(
+                    buf,
+                    header_text=f"{customer_name} - Customer Sales Order",
+                    orientation="portrait"
+                )
+
+                elements: List[Any] = []
+
+                groups = defaultdict(lambda: defaultdict(list))
+
+                for shipment in customer["shipments"]:
+                    production_date = shipment.get("production_date")
+
+                    for item in shipment.get("shipment_items", []):
+                        product = item.get("product")
+                        if not product:
+                            continue
+                        
+                        product_name = product.get('description')
+
+                        groups[production_date][product_name].append(item)
+
+                production_style = pdf.styles["Normal"].clone("production_style")
+                production_style.fontName = "Helvetica-Bold"
+                production_style.fontSize = 11
+                production_style.leading = 13
+                production_style.leftIndent = 0
+                production_style.firstLineIndent = 0
+                production_style.spaceBefore = 0
+                production_style.spaceAfter = 6
+                
+                dispatch_style = pdf.styles["Normal"].clone("dispatch_style")
+                dispatch_style.fontName = "Helvetica-Bold"
+                dispatch_style.fontSize = 8
+                dispatch_style.leftIndent = 0
+                dispatch_style.firstLineIndent = 0
+                dispatch_style.spaceBefore = 0
+                dispatch_style.spaceAfter = 8
+
+                customer_style = pdf.styles["Normal"].clone("customer_style")
+                customer_style.fontName = "Helvetica-Bold"
+                customer_style.fontSize = 10
+                customer_style.leftIndent = 0
+                customer_style.firstLineIndent = 0
+                customer_style.spaceBefore = 0
+                customer_style.spaceAfter = 6
+                                
+                                
+                for production_date, customers in groups.items():
+                    formated_date = datetime.datetime.fromisoformat(
+                                        production_date.replace("Z", "+00:00")
+                                    ).strftime("%d %b %Y")
+                    
+                    elements.append(
+                        Paragraph(f"For products dispatched on: {formated_date}", dispatch_style)
+                    )
+                    elements.append(Spacer(1, 8))
+
+                    for awb_groups in customers.items():
+                        table = build_customer_allocation_table(pdf, awb_groups)
+                        elements.append(table)
+                        elements.append(Spacer(1, 18))
+
+                    elements.append(Spacer(1, 8))
+                        
+
+                pdf.build(elements)
+                pdf_bytes = buf.getvalue()
+                buf.close()
+
+                file_path = f"customer-allocation-forms/{uuid4().hex}.pdf"
+
+                res = self.supabase_admin.storage.from_("generated-reports").upload(
+                    file_path,
+                    pdf_bytes,
+                    {"content-type": "application/pdf"},
+                )
+
+                url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{res.full_path}"
+
+                response.append({
+                    "type": "customer_allocation_form",
+                    "customer_id": customer_id,
+                    "url": url,
+                    "body": body,
+                    "date_generated": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
+                                
             return response
 
         except Exception as e:

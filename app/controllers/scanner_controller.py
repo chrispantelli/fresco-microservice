@@ -14,4 +14,8 @@ class ScannerController:
     async def scanner_template_one(self, body: Any = Body(...)):
         return await self.scanner_service.scanner_template_one(body)
     
+    @scanner_router.post('/scanner/template_two', operation_id="scanner_template_two")
+    async def scanner_template_two(self, body: Any = Body(...)):
+        return await self.scanner_service.scanner_template_two(body)
+    
         

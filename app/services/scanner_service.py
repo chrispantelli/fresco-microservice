@@ -65,3 +65,80 @@ class ScannerService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Unable to process shipment file. Please try again or manually import."
             )
+            
+    async def scanner_template_two(self, body: List[Dict[str, Any]]):
+        try:
+            shipment_url = body['scanned_shipment_url']
+
+            tables = await run_in_threadpool(
+                camelot.read_pdf,
+                shipment_url,
+                pages="all"
+            )
+
+            df = pd.concat([t.df for t in tables], ignore_index=True)
+            df = df.dropna(how="all")
+
+            df = df[~df[0].astype(str).str.contains(
+                r"DESCRIPTION|TOTAL|LATIN NAME|#SAYI|^$",
+                case=False,
+                na=False
+            )]
+
+            df = df[df[0].astype(str).str.strip() != "0"]
+            df = df.reset_index(drop=True)
+
+            split_desc = df[0].astype(str).str.split("\n", n=1, expand=True)
+
+            df["product"] = (
+                split_desc[0].fillna("").str.strip()
+                + " "
+                + split_desc[1].fillna("").str.strip()
+            ).str.replace(r"\s+", " ", regex=True).str.strip()
+
+            def clean_number(col):
+                return pd.to_numeric(
+                    col.astype(str)
+                    .str.replace(",", ".", regex=False)
+                    .str.replace(r"[^\d.]", "", regex=True),
+                    errors="coerce"
+                )
+
+            df["boxes"] = clean_number(df[1]).fillna(0).astype(int)
+            df["net_weight"] = clean_number(df[2])
+            df["total_net_weight"] = clean_number(df[3])
+            df["gross_weight"] = clean_number(df[4])
+
+            df_clean = df[[
+                "product",
+                "boxes",
+                "net_weight",
+                "total_net_weight",
+                "gross_weight"
+            ]].copy()
+
+            df_clean = df_clean[df_clean["product"].ne("")]
+            df_clean = df_clean[df_clean["boxes"] > 0].reset_index(drop=True)
+
+            df_clean["row_id"] = df_clean.index
+
+            df_clean = df_clean.loc[df_clean.index.repeat(df_clean["boxes"])].reset_index(drop=True)
+
+            df_clean["box_number"] = range(1, len(df_clean) + 1)
+            df_clean["pieces_per_box"] = 1
+
+            df_clean = df_clean[[
+                "box_number",
+                "product",
+                "pieces_per_box",
+                "net_weight"
+            ]]
+
+            return {"data": df_clean.to_dict(orient="records")}
+
+        except Exception as e:
+            print(f"scanner_template_two failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to process shipment file. Please try again or manually import."
+            )

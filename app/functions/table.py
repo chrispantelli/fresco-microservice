@@ -3,7 +3,7 @@ from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.lib import colors
 
 from app.classes.report import ReportTemplate
-from app.utils import format_date
+from app.utils import format_date, to_float
 
 def build_release_table(
     pdf_doc: ReportTemplate,
@@ -436,20 +436,25 @@ def build_customer_allocation_table(
     
     for index, item in enumerate(items):
         product_header = product if index == 0 else ""
+
+        net_weight = to_float(item.get("net_weight"))
+        price_per_kilo = to_float(item.get("todays_price_per_kilo"))
+        price = to_float(item.get("price"))
+
         data.append([
             Paragraph(str(product_header or ""), normal),
-            Paragraph(str(item.get('awb') or ""), normal),
-            Paragraph(str(item.get('box_number') or ""), normal),
-            Paragraph(str(item.get('pieces_per_box') or ""), normal),
-            Paragraph(str(item.get('net_weight') or ""), normal),
-            Paragraph("£" + str(item.get('todays_price_per_kilo') or "0.00"), normal),
-            Paragraph("£" + str(item.get('price') or "0.00"), normal),
+            Paragraph(str(item.get("awb") or ""), normal),
+            Paragraph(str(item.get("box_number") or ""), normal),
+            Paragraph(str(item.get("pieces_per_box") or ""), normal),
+            Paragraph(f"{net_weight:.2f}", normal),
+            Paragraph(f"£{price_per_kilo:.2f}", normal),
+            Paragraph(f"£{price:.2f}", normal),
         ])
-        
+
         total_box_number += 1
-        total_customer_weight += item.get('net_weight')
-        total_price_per_kilo += item.get('todays_price_per_kilo')
-        total_price += item.get('price')
+        total_customer_weight += net_weight
+        total_price_per_kilo += price_per_kilo
+        total_price += price
         
     data.append([
         Paragraph("Totals", footer),

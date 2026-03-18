@@ -1,5 +1,6 @@
 import camelot
 import pandas as pd
+import tabula
 from fastapi.concurrency import run_in_threadpool
 from fastapi import HTTPException, status
 from typing import Any, Dict, List
@@ -138,6 +139,79 @@ class ScannerService:
 
         except Exception as e:
             print(f"scanner_template_two failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to process shipment file. Please try again or manually import."
+            )
+            
+    async def scanner_template_three(self, body: List[Dict[str, Any]]):
+        try:
+            shipment_url = body["scanned_shipment_url"]
+
+            tables = await run_in_threadpool(
+                tabula.read_pdf,
+                shipment_url,
+                pages="all",
+                multiple_tables=True
+            )
+
+            df = pd.concat(tables, ignore_index=True)
+
+            df = df.dropna(how="all")
+            df = df.dropna(axis=1, how="all")
+
+            df.columns = (
+                df.columns.astype(str)
+                .str.strip()
+                .str.replace(r"\s+", "_", regex=True)
+                .str.lower()
+            )
+
+            df = df.rename(columns={"unnamed:_0": "description"})
+
+            COLUMN_MAPPING = {
+                "caja": "box_number",
+                "description": "product",
+                "cantidad": "net_weight",
+            }
+
+            df = df.rename(columns=COLUMN_MAPPING)
+
+            if "net_weight" in df.columns:
+                df["net_weight"] = (
+                    df["net_weight"]
+                    .astype(str)
+                    .str.replace(".", "", regex=False)
+                    .str.replace(",", ".", regex=False)
+                )
+                df["net_weight"] = pd.to_numeric(df["net_weight"], errors="coerce")
+
+            if "product" in df.columns:
+                df["product"] = (
+                    df["product"]
+                    .astype(str)
+                    .str.replace(r"\s+", " ", regex=True)
+                    .str.strip()
+                )
+
+            df["pieces_per_box"] = 1
+
+            df = df[[
+                "box_number",
+                "product",
+                "pieces_per_box",
+                "net_weight"
+            ]]
+
+            # Remove bad rows
+            df = df[df["product"].notna() & (df["product"] != "")]
+            df = df[df["box_number"].notna()]
+
+            df = df.reset_index(drop=True)
+
+            return {"data": df.to_dict(orient="records")}
+        except Exception as e:
+            print(f"scanner_template_three failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unable to process shipment file. Please try again or manually import."

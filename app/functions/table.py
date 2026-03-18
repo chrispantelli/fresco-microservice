@@ -3,7 +3,7 @@ from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.lib import colors
 
 from app.classes.report import ReportTemplate
-from app.utils import format_date, to_float
+from app.utils import format_date, to_float, to_number
 
 def build_release_table(
     pdf_doc: ReportTemplate,
@@ -167,7 +167,11 @@ def build_shipment_allocation_table(
         Paragraph("Price", header)
     ]]
 
-    for index, item in enumerate(shipment_items):
+    for item in shipment_items:
+        price = to_number(item.get("price"))
+        net_weight = to_number(item.get("net_weight"))
+        pieces_per_box = to_number(item.get("pieces_per_box"))
+
         data.append([
             Paragraph(str(item.get("box_number") or ""), normal),
             [
@@ -176,16 +180,16 @@ def build_shipment_allocation_table(
             ],
             Paragraph(str(item.get("currency") or ""), normal),
             Paragraph(str(item.get("rate") or ""), normal),
-            Paragraph(f"{str(item.get('net_weight') or '')}kg", normal),
-            Paragraph(str(item.get("pieces_per_box") or ""), normal),
+            Paragraph(f"{net_weight:.2f}kg", normal),
+            Paragraph(str(int(pieces_per_box)) if pieces_per_box else "", normal),
             Paragraph(str(item.get("todays_price_per_kilo") or ""), normal),
             Paragraph((item.get("transport_companies") or {}).get("name") or "-", normal),
-            Paragraph(f"£{item.get('price'):.2f}", normal),
+            Paragraph(f"£{price:.2f}", normal),
         ])
     
-    total_weight = sum(item.get("net_weight", 0) for item in shipment_items)
-    total_pieces_per_box = sum(item.get("pieces_per_box", 0) for item in shipment_items)
-    total_price = sum(item.get("price", 0) for item in shipment_items)
+    total_weight = sum(to_number(item.get("net_weight")) for item in shipment_items)
+    total_pieces_per_box = sum(to_number(item.get("pieces_per_box")) for item in shipment_items)
+    total_price = sum(to_number(item.get("price")) for item in shipment_items)
     
     data.append([
         Paragraph(f"{len(shipment_items)}", footer),
@@ -193,7 +197,7 @@ def build_shipment_allocation_table(
         Paragraph("", footer),
         Paragraph("", footer),
         Paragraph(f"{total_weight:.2f}kg", footer),
-        Paragraph(f"{total_pieces_per_box}", footer),
+        Paragraph(f"{int(total_pieces_per_box)}", footer),
         Paragraph("", footer),
         Paragraph("", footer),
         Paragraph(f"£{total_price:.2f}", footer)

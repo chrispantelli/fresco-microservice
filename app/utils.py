@@ -17,3 +17,11 @@ def to_float(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+    
+def to_number(value, default=0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default

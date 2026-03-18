@@ -216,3 +216,111 @@ class ScannerService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unable to process shipment file. Please try again or manually import."
             )
+            
+    async def scanner_template_four(self, body: List[Dict[str, Any]]):
+        try:
+            shipment_url = body["scanned_shipment_url"]
+            
+            tables = await run_in_threadpool(
+                tabula.read_pdf,
+                shipment_url,
+                pages="all",
+                multiple_tables=True
+            )
+
+            cleaned_dfs = []
+
+            for table in tables:
+                if table.empty:
+                    continue
+
+                df = table.copy()
+
+                df.columns = (
+                    df.columns.astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .str.replace("\r", " ", regex=False)
+                    .str.replace(r"\s+", " ", regex=True)
+                )
+
+                expected_cols = {
+                    "box no",
+                    "discription",
+                    "batch no",
+                    "net wgt. (kg)",
+                    "pcs"
+                }
+
+                if not expected_cols.issubset(set(df.columns)):
+                    continue
+
+                df = df.dropna(how="all")
+                df = df.fillna("")
+
+                df = df[
+                    ~(
+                        df["box no"].astype(str).str.strip().eq("") &
+                        df["discription"].astype(str).str.strip().eq("") &
+                        df["net wgt. (kg)"].astype(str).str.strip().eq("")
+                    )
+                ]
+
+                df = df[df["box no"].astype(str).str.strip() != ""]
+
+                df = df.rename(columns={
+                    "box no": "box_number",
+                    "discription": "product",
+                    "batch no": "batch_no",
+                    "net wgt. (kg)": "net_weight",
+                    "pcs": "pieces_per_box",
+                })
+
+                df["box_number"] = pd.to_numeric(df["box_number"], errors="coerce")
+                df["pieces_per_box"] = pd.to_numeric(df["pieces_per_box"], errors="coerce")
+
+                df["net_weight"] = (
+                    df["net_weight"]
+                    .astype(str)
+                    .str.strip()
+                    .str.replace(r"\s+", " ", regex=True)   # "16 80" -> still "16 80"
+                    .str.replace(" ", ".", regex=False)     # "16 80" -> "16.80"
+                )
+                df["net_weight"] = pd.to_numeric(df["net_weight"], errors="coerce")
+
+                df["product"] = (
+                    df["product"]
+                    .astype(str)
+                    .str.replace(r"\s+", " ", regex=True)
+                    .str.strip()
+                )
+
+                df = df[[
+                    "box_number",
+                    "product",
+                    "pieces_per_box",
+                    "net_weight",
+                ]]
+
+                df = df[df["box_number"].notna()]
+                df = df[df["product"].ne("")]
+
+                df["box_number"] = df["box_number"].astype(int)
+                df["pieces_per_box"] = df["pieces_per_box"].fillna(0).astype(int)
+
+                cleaned_dfs.append(df)
+
+            if not cleaned_dfs:
+                return {"data": []}
+
+            final_df = pd.concat(cleaned_dfs, ignore_index=True)
+            final_df = final_df.where(pd.notnull(final_df), None)
+
+            return {"data": final_df.to_dict(orient="records")}
+
+        except Exception as e:
+            print(f"scanner_template_three failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to process shipment file. Please try again or manually import."
+            )

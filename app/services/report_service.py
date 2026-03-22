@@ -45,18 +45,25 @@ class ReportService:
 
                 elements: List[Any] = []
 
-                groups = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+                groups = defaultdict(
+                    lambda: defaultdict(
+                        lambda: defaultdict(lambda: {"supplier": None, "items": []})
+                    )
+                )
 
                 for shipment in company["shipments"]:
                     awb = shipment.get("awb")
                     production_date = shipment.get("production_date")
+                    supplier = shipment.get("supplier")
 
                     for item in shipment["shipment_items"]:
                         customer = item.get("customer")
 
                         if customer:
                             customer_name = customer.get("name")
-                            groups[production_date][customer_name][awb].append(item)
+                            awb_group = groups[production_date][customer_name][awb]
+                            awb_group["supplier"] = supplier
+                            awb_group["items"].append(item)
 
                 production_style = pdf.styles["Normal"].clone("production_style")
                 production_style.fontName = "Helvetica-Bold"
@@ -203,7 +210,11 @@ class ReportService:
 
                 elements: List[Any] = []
 
-                groups = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+                groups = defaultdict(
+                    lambda: defaultdict(
+                        lambda: defaultdict(lambda: {"supplier": None, "items": []})
+                    )
+                )
 
                 for shipment in company["shipments"]:
                     awb = shipment.get("awb")

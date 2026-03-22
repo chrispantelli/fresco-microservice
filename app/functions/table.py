@@ -7,13 +7,19 @@ from app.utils import format_date, to_float, to_number
 
 def build_release_table(
     pdf_doc: ReportTemplate,
-    awb_groups: Dict[str, List[Dict[str, Any]]]
+    awb_groups: Dict[str, Dict[str, Any]]
 ):
     frame_w = pdf_doc.frame.width
 
     normal = pdf_doc.styles["Normal"].clone("tbl_normal")
     normal.fontSize = 9
     normal.leading = 11
+    
+    supplier_style = pdf_doc.styles["Normal"].clone("supplier_style")
+    supplier_style.fontName = "Helvetica-Oblique"  # italic
+    supplier_style.fontSize = 8
+    supplier_style.leading = 10
+    supplier_style.textColor = colors.grey
 
     header = pdf_doc.styles["Normal"].clone("tbl_header")
     header.fontName = "Helvetica-Bold"
@@ -25,7 +31,7 @@ def build_release_table(
     footer.fontSize = 9
     footer.leading = 11
 
-    col_fracs = [0.20, 0.20, 0.40, 0.10, 0.10]
+    col_fracs = [0.16, 0.18, 0.18, 0.28, 0.10, 0.10]
     col_widths = [frame_w * f for f in col_fracs]
 
     data: List[List[Any]] = [[
@@ -39,13 +45,32 @@ def build_release_table(
     total_box_number = 0
     total_customer_weight = 0.0
 
-    for awb, items in awb_groups.items():
+    for awb, awb_data in awb_groups.items():
+        supplier = awb_data.get("supplier")
+        items = awb_data.get("items", [])
+
         for index, item in enumerate(items):
-            awb_header = awb if index == 0 else ""
             weight = float(item.get("net_weight") or 0)
 
+            if index == 0:
+                data.append([
+                    Paragraph(str(awb or ""), normal),
+                    Paragraph("", normal),
+                    Paragraph("", normal),
+                    Paragraph("", normal),
+                    Paragraph("", normal),
+                ])
+
+                data.append([
+                    Paragraph(f"{supplier or ''}", supplier_style),
+                    Paragraph("", normal),
+                    Paragraph("", normal),
+                    Paragraph("", normal),
+                    Paragraph("", normal),
+                ])
+
             data.append([
-                Paragraph(str(awb_header or ""), normal),
+                Paragraph("", normal), 
                 Paragraph(str(item.get("transportCompany", {}).get("name", "") or ""), normal),
                 Paragraph(str(item.get("product", {}).get("description", "") or ""), normal),
                 Paragraph(str(item.get("box_number", "") or ""), normal),
@@ -57,6 +82,7 @@ def build_release_table(
 
     data.append([
         Paragraph("Totals", footer),
+        Paragraph("", footer),
         Paragraph("", footer),
         Paragraph("", footer),
         Paragraph(str(total_box_number), footer),
@@ -82,7 +108,7 @@ def build_release_table(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("BACKGROUND", (0, last_row), (-1, last_row), colors.whitesmoke),
         ("LINEABOVE", (0, last_row), (-1, last_row), 1.0, colors.grey),
-        ("ALIGN", (3, 1), (4, -1), "RIGHT"),
+        ("ALIGN", (4, 1), (5, -1), "RIGHT"),
     ]))
 
     return table

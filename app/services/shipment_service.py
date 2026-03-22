@@ -180,7 +180,6 @@ def generate_allocation_sheet(data, title):
         total_value = 0.0
 
         for item in customer.get("items", []):
-            print(item)
             box_no = item.get("box_number", 0) or 0
             weight = float(item.get("net_weight", 0) or 0)
             ppk = item.get("price_per_kg")

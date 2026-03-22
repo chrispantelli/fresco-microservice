@@ -15,7 +15,7 @@ class ReportController:
         return await self.report_service.create_release_form(body)
     
     @report_router.post('/reports/shipment-allocations', operation_id="create_shipment_allocation")
-    async def create_release_form(self, body: Any = Body(...)):
+    async def create_shipment_allocation(self, body: Any = Body(...)):
         return await self.report_service.create_shipment_allocation(body)
     
     @report_router.post('/reports/collection-forms', operation_id="create_collection_form")

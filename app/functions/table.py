@@ -31,7 +31,7 @@ def build_release_table(
     footer.fontSize = 9
     footer.leading = 11
 
-    col_fracs = [0.16, 0.18, 0.18, 0.28, 0.10, 0.10]
+    col_fracs = [0.16, 0.18, 0.46, 0.10, 0.10]
     col_widths = [frame_w * f for f in col_fracs]
 
     data: List[List[Any]] = [[
@@ -71,7 +71,7 @@ def build_release_table(
 
             data.append([
                 Paragraph("", normal), 
-                Paragraph(str(item.get("transportCompany", {}).get("name", "") or ""), normal),
+                Paragraph(str((item.get("transportCompany") or {}).get("name", "") or ""), normal),
                 Paragraph(str(item.get("product", {}).get("description", "") or ""), normal),
                 Paragraph(str(item.get("box_number", "") or ""), normal),
                 Paragraph(f"{weight:.2f}", normal),
@@ -82,7 +82,6 @@ def build_release_table(
 
     data.append([
         Paragraph("Totals", footer),
-        Paragraph("", footer),
         Paragraph("", footer),
         Paragraph("", footer),
         Paragraph(str(total_box_number), footer),

@@ -58,12 +58,11 @@ class ReportService:
 
                     for item in shipment["shipment_items"]:
                         customer = item.get("customer")
+                        customer_name = customer.get("name") if customer else "Unallocated"
 
-                        if customer:
-                            customer_name = customer.get("name")
-                            awb_group = groups[production_date][customer_name][awb]
-                            awb_group["supplier"] = supplier
-                            awb_group["items"].append(item)
+                        awb_group = groups[production_date][customer_name][awb]
+                        awb_group["supplier"] = supplier
+                        awb_group["items"].append(item)
 
                 production_style = pdf.styles["Normal"].clone("production_style")
                 production_style.fontName = "Helvetica-Bold"

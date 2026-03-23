@@ -211,7 +211,7 @@ class ReportService:
 
                 groups = defaultdict(
                     lambda: defaultdict(
-                        lambda: defaultdict(lambda: {"supplier": None, "items": []})
+                        lambda: defaultdict(list)
                     )
                 )
 

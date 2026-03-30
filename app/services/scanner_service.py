@@ -219,8 +219,8 @@ class ScannerService:
             
     async def scanner_template_four(self, body: List[Dict[str, Any]]):
         try:
-            shipment_url = body["scanned_shipment_url"]
-            
+            shipment_url = "https://gamghgjxgnpbshhdseea.supabase.co/storage/v1/object/public/scanned-shipments/FRESCO%20PL_29%20MARCH%202026.pdf"
+
             tables = await run_in_threadpool(
                 tabula.read_pdf,
                 shipment_url,
@@ -228,98 +228,38 @@ class ScannerService:
                 multiple_tables=True
             )
 
-            cleaned_dfs = []
+            df = pd.concat(tables, ignore_index=True)
+            
+            df = df.where(pd.notnull(df), None)
+            
+            df = df.dropna(how="all")
+            df = df.dropna(axis=1, how="all")
 
-            for table in tables:
-                if table.empty:
-                    continue
+            df.columns = (
+                df.columns.astype(str)
+                .str.strip()
+                .str.replace(r"\s+", "_", regex=True)
+                .str.lower()
+            )
 
-                df = table.copy()
+            
+            df["box_number"] = df["box_no"]
+            
+            df["product"] = (
+                df["fish_type_cut_type_skin_type"].astype(str)
+                + " "
+                + df["grade"].astype(str)
+            )
+            
+            df["net_weight"] = df["weight"]
+            
+            df["pieces_per_box"] = df["pcs"]
+            
+            df = df.drop(columns=['box_no', 'fish_type_cut_type_skin_type', 'grade', 'weight', 'pcs'])
 
-                df.columns = (
-                    df.columns.astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .str.replace("\r", " ", regex=False)
-                    .str.replace(r"\s+", " ", regex=True)
-                )
-
-                expected_cols = {
-                    "box no",
-                    "discription",
-                    "batch no",
-                    "net wgt. (kg)",
-                    "pcs"
-                }
-
-                if not expected_cols.issubset(set(df.columns)):
-                    continue
-
-                df = df.dropna(how="all")
-                df = df.fillna("")
-
-                df = df[
-                    ~(
-                        df["box no"].astype(str).str.strip().eq("") &
-                        df["discription"].astype(str).str.strip().eq("") &
-                        df["net wgt. (kg)"].astype(str).str.strip().eq("")
-                    )
-                ]
-
-                df = df[df["box no"].astype(str).str.strip() != ""]
-
-                df = df.rename(columns={
-                    "box no": "box_number",
-                    "discription": "product",
-                    "batch no": "batch_no",
-                    "net wgt. (kg)": "net_weight",
-                    "pcs": "pieces_per_box",
-                })
-
-                df["box_number"] = pd.to_numeric(df["box_number"], errors="coerce")
-                df["pieces_per_box"] = pd.to_numeric(df["pieces_per_box"], errors="coerce")
-
-                df["net_weight"] = (
-                    df["net_weight"]
-                    .astype(str)
-                    .str.strip()
-                    .str.replace(r"\s+", " ", regex=True)   # "16 80" -> still "16 80"
-                    .str.replace(" ", ".", regex=False)     # "16 80" -> "16.80"
-                )
-                df["net_weight"] = pd.to_numeric(df["net_weight"], errors="coerce")
-
-                df["product"] = (
-                    df["product"]
-                    .astype(str)
-                    .str.replace(r"\s+", " ", regex=True)
-                    .str.strip()
-                )
-
-                df = df[[
-                    "box_number",
-                    "product",
-                    "pieces_per_box",
-                    "net_weight",
-                ]]
-
-                df = df[df["box_number"].notna()]
-                df = df[df["product"].ne("")]
-
-                df["box_number"] = df["box_number"].astype(int)
-                df["pieces_per_box"] = df["pieces_per_box"].fillna(0).astype(int)
-
-                cleaned_dfs.append(df)
-
-            if not cleaned_dfs:
-                return {"data": []}
-
-            final_df = pd.concat(cleaned_dfs, ignore_index=True)
-            final_df = final_df.where(pd.notnull(final_df), None)
-
-            return {"data": final_df.to_dict(orient="records")}
-
+            return {"data": df.to_dict(orient="records")}
         except Exception as e:
-            print(f"scanner_template_three failed: {e}")
+            print(f"scanner_template_four failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unable to process shipment file. Please try again or manually import."

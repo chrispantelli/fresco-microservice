@@ -219,7 +219,7 @@ class ScannerService:
             
     async def scanner_template_four(self, body: List[Dict[str, Any]]):
         try:
-            shipment_url = "https://gamghgjxgnpbshhdseea.supabase.co/storage/v1/object/public/scanned-shipments/FRESCO%20PL_29%20MARCH%202026.pdf"
+            shipment_url = body["scanned_shipment_url"]
 
             tables = await run_in_threadpool(
                 tabula.read_pdf,
@@ -260,6 +260,92 @@ class ScannerService:
             return {"data": df.to_dict(orient="records")}
         except Exception as e:
             print(f"scanner_template_four failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to process shipment file. Please try again or manually import."
+            )
+            
+    async def scanner_template_five(self, body: List[Dict[str, Any]]):
+        try:
+            shipment_url = body["scanned_shipment_url"]
+
+            tables = await run_in_threadpool(
+                tabula.read_pdf,
+                shipment_url,
+                pages="all",
+                multiple_tables=True,
+                stream=True,
+            )
+
+            if not tables:
+                return {"data": []}
+
+            df = pd.concat(tables, ignore_index=True)
+            df.columns = [str(col).replace("\r", " ").replace("\n", " ").strip() for col in df.columns]
+
+            records = []
+
+            for _, row in df.iterrows():
+                values = [None if pd.isna(v) else str(v).strip() for v in row.tolist()]
+                values = [v for v in values if v not in (None, "", "nan")]
+
+                if len(values) < 5:
+                    continue
+
+                row_text = " ".join(values).lower()
+
+                if (
+                    "total net weight" in row_text
+                    or "packing list" in row_text
+                    or "wght box" in row_text
+                    or "invoice no" in row_text
+                    or "awb no" in row_text
+                    or "flight no" in row_text
+                    or "destination" in row_text
+                    or "consignee" in row_text
+                    or "eu approval no" in row_text
+                ):
+                    continue
+
+                try:
+                    box_number = int(float(values[0]))
+                except (ValueError, TypeError):
+                    continue
+
+                if box_number < 100 or box_number > 9999:
+                    continue
+
+                product = values[1]
+                batch_number = values[2]
+
+                try:
+                    float(product)
+                    continue
+                except ValueError:
+                    pass
+
+                try:
+                    net_weight = float(values[3])
+                except (ValueError, TypeError):
+                    net_weight = None
+
+                try:
+                    pcs = int(float(values[4]))
+                except (ValueError, TypeError):
+                    pcs = None
+
+                records.append({
+                    "box_number": box_number,
+                    "product": product,
+                    "batch_number": batch_number,
+                    "net_weight": net_weight,
+                    "pieces_per_box": pcs,
+                })
+
+            return {"data": records}
+
+        except Exception as e:
+            print(f"scanner_template_five failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unable to process shipment file. Please try again or manually import."

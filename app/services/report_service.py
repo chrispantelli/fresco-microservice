@@ -15,18 +15,14 @@ from reportlab.lib import colors
 from app.classes.report import ReportTemplate
 from app.functions.table import build_collection_table, build_customer_allocation_table, build_release_table, build_shipment_allocation_summary_grid, build_shipment_allocation_table
 from app.helpers.db import get_db_connection
-from app.helpers.supabase import supabase_user_client, supabase_admin_client
+from app.helpers.supabase import supabase_client
 
 class ReportService:
     def __init__(
         self,
-        supabase_user: Client = Depends(supabase_user_client),
-        supabase_admin: Client = Depends(supabase_admin_client),
-        db_connection: Client = Depends(get_db_connection),
+        supabase_client: Client = Depends(supabase_client),
     ):
-        self.supabase_user = supabase_user
-        self.supabase_admin = supabase_admin
-        self.db_connection = db_connection
+        self.supabase_client = supabase_client
     
     async def create_release_form(self, body: List[Dict[str, Any]]):
         try:
@@ -216,7 +212,7 @@ class ReportService:
 
                 file_path = f"release-forms/{uuid4().hex}.pdf"
 
-                res = self.supabase_admin.storage.from_("generated-reports").upload(
+                res = self.supabase_client.storage.from_("generated-reports").upload(
                     file_path,
                     pdf_bytes,
                     {"content-type": "application/pdf"},
@@ -273,7 +269,7 @@ class ReportService:
 
             file_path = f"shipment-allocations/{uuid4().hex}.pdf"
 
-            res = self.supabase_admin.storage.from_("generated-reports").upload(
+            res = self.supabase_client.storage.from_("generated-reports").upload(
                 file_path,
                 pdf_bytes,
                 {"content-type": "application/pdf"},
@@ -379,7 +375,7 @@ class ReportService:
 
                 file_path = f"collection-forms/{uuid4().hex}.pdf"
 
-                res = self.supabase_admin.storage.from_("generated-reports").upload(
+                res = self.supabase_client.storage.from_("generated-reports").upload(
                     file_path,
                     pdf_bytes,
                     {"content-type": "application/pdf"},
@@ -595,7 +591,7 @@ class ReportService:
 
                 file_path = f"customer-allocation-forms/{uuid4().hex}.pdf"
 
-                res = self.supabase_admin.storage.from_("generated-reports").upload(
+                res = self.supabase_client.storage.from_("generated-reports").upload(
                     file_path,
                     pdf_bytes,
                     {"content-type": "application/pdf"},
